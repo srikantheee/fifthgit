@@ -1,0 +1,51 @@
+#!groovy
+node('docker') {
+
+  def gitShortCommitID = null
+
+  def job_name_token = "${JOB_NAME}".split('/')
+  def job_branch_name = "${job_name_token[-1]}".toLowerCase()
+
+  String branch = String.valueOf(env.branchName).toLowerCase().replaceAll('\\/','-').replaceAll('\\.','_')
+
+  def covFiles = null
+
+  stage('Source') {
+    checkout scm
+	  gitShortCommitID = gitCommitShortHash()
+    notifyStash
+  }
+
+artifactoryDockerRegistry {
+
+    def dimg = docker.image('dockerimage')
+    dimg.inside('-u root') {
+	stage('Run Tests') {
+	
+	  def cog_modules = ['bond_recommender','bond_profit_report']
+	  withEnv(["PYTHONPATH=.", "PATH=${PATH}:~/.local/bin"]) {
+            for (int i = 0; i < cog_modules.size(); i++) {
+	  			sh """
+				  echo "Python Modules:  ${cog_modules[i]}"
+                  if [[ ! -z ${cog_modules[i]} ]]; then
+                    cd python_models/${cog_modules[i]}
+                   yum -y update
+                   yum -y install gcc gcc-c++ python36-devel
+                   yum -y install python3
+                   yum -y install python3-pip
+                   python3 --version
+                   gcc --version
+                   pip3 install -i url_for_dependency  -r requirements.txt
+				   sh service.sh test dev
+				   cd ..
+				  fi
+                """   
+	}
+   }
+   
+   print "FINAL COV FILES : ${covFiles}"
+   
+  }
+ }
+}
+}
